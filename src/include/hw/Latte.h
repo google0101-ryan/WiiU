@@ -13,4 +13,7 @@ public:
 private:
     uint32_t timer;
     uint32_t alarm;
+    uint32_t gpioIopIntStatus, gpioIopIntEn;
+    uint32_t iopIntStatusAll, iopIntStatusLatte;
+    bool iopIrqIntEnAll, iopFiqIntEnAll, iopIrqIntEnLatte, iopFiqIntEnLatte;
 };

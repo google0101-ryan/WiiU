@@ -2,6 +2,7 @@
 #include <util/debug.h>
 #include <cstdio>
 #include <cstdlib>
+#include <cassert>
 
 Starbuck::Starbuck(Bus* pBus)
 : mBus(pBus)
@@ -24,7 +25,7 @@ void Starbuck::Tick()
 {
     if (cpsr.t)
     {
-        uint16_t opcode = mBus->SRead16(mPc-4);
+        uint16_t opcode = Read16(mPc-4);
 
         if (CanDisassemble) printf("0x%04x (0x%08x): ", opcode, mPc-4);
 
@@ -41,13 +42,10 @@ void Starbuck::Tick()
     }
     else
     {
-        uint32_t opcode = mBus->SRead32(mPc-8);
+        uint32_t opcode = Read32(mPc-8);
 
         if (opcode == 0)
             throw std::runtime_error("Probably a bug: NULL opcode!");
-        
-        if (mPc-8 == 0x8122500)
-            CanDisassemble = true;
 
         if (CanDisassemble) printf("0x%08x (0x%08x): ", opcode, mPc-8);
 
@@ -90,6 +88,8 @@ void Starbuck::SwitchMode(uint32_t mode)
     // R15 points to PC in all modes
     mRegs[15] = &mPc;
 
+    printf("Switching to mode 0x%02x\n", mode);
+
     switch (mode)
     {
     case MODE_SVC:
@@ -97,25 +97,31 @@ void Starbuck::SwitchMode(uint32_t mode)
         mRegs[14] = &mSvcRegs[1]; // LR
         curSpsr = &svcSpsr;
         break;
+    case MODE_SYS:
     case MODE_USR:
         mRegs[13] = &mUsrRegs[0]; // SP
         mRegs[14] = &mUsrRegs[1]; // LR
+        curSpsr = NULL;
         break;
     case MODE_FIQ:
         for (int i = 0; i < 7; i++)
             mRegs[i+8] = &mFiqRegs[i];
+        curSpsr = &fiqSpsr;
         break;
     case MODE_ABT:
         mRegs[13] = &mAbtRegs[0]; // SP
         mRegs[14] = &mAbtRegs[1]; // LR
+        curSpsr = &abtSpsr;
         break;
     case MODE_IRQ:
         mRegs[13] = &mIrqRegs[0]; // SP
         mRegs[14] = &mIrqRegs[1]; // LR
+        curSpsr = &irqSpsr;
         break;
     case MODE_UND:
         mRegs[13] = &mUndRegs[0]; // SP
         mRegs[14] = &mUndRegs[1]; // LR
+        curSpsr = &undSpsr;
         break;
     default:
         printf("Failed to switch to unknown mode %d\n", (int)mode);
@@ -123,6 +129,88 @@ void Starbuck::SwitchMode(uint32_t mode)
     }
 }
 
+uint32_t Starbuck::TranslateAddr(uint32_t addr)
+{
+    if (!cp15->IsMMUEnabled())
+        return addr;
+    
+    uint32_t firstLevelOffs = (addr >> 20) * 4;
+    uint32_t firstLevelAddr = cp15->GetPTBase() + firstLevelOffs;
+    uint32_t firstLevelDesc = mBus->SRead32(firstLevelAddr);
+
+    int firstLevelType = firstLevelDesc & 3;
+    if (firstLevelType == 0)
+    {
+        printf("TODO: Signal page fault!\n");
+        exit(1);
+    }
+    else if (firstLevelType == 1)
+    {
+        uint32_t secondLevelBase = firstLevelDesc & ~0x3FF;
+		uint32_t secondLevelOffs = ((addr >> 12) & 0xFF) * 4;
+		uint32_t secondLevelAddr = secondLevelBase + secondLevelOffs;
+		uint32_t secondLevelDesc = mBus->SRead32(secondLevelAddr);
+
+        int secondLevelType = secondLevelDesc & 3;
+        assert(secondLevelType == 2);
+		if (secondLevelType == 0) 
+        {
+            printf("TODO: Signal page fault for second level! (0x%08x, 0x%08x)\n", secondLevelDesc, addr);
+            throw std::runtime_error("2ND LEVEL PAGE FAULT!\n");
+		}
+        uint32_t pageBase = secondLevelDesc & ~0xFFF;
+        addr = pageBase + (addr & 0xFFF);
+    }
+    else if (firstLevelType == 2)
+    {
+        int ap = (firstLevelDesc >> 10) & 3;
+        uint32_t sectionBase = firstLevelDesc & ~0xFFFFF;
+        addr = sectionBase + (addr & 0xFFFFF);
+    }
+    return addr;
+}
+
+uint32_t Starbuck::Read32(uint32_t addr)
+{
+    addr = TranslateAddr(addr);
+
+    return mBus->SRead32(addr);
+}
+
+uint16_t Starbuck::Read16(uint32_t addr)
+{
+    addr = TranslateAddr(addr);
+
+    return mBus->SRead16(addr);
+}
+
+uint8_t Starbuck::Read8(uint32_t addr)
+{
+    addr = TranslateAddr(addr);
+
+    return mBus->SRead8(addr);
+}
+
+void Starbuck::Write32(uint32_t addr, uint32_t data)
+{
+    addr = TranslateAddr(addr);
+
+    mBus->SWrite32(addr, data);
+}
+
+void Starbuck::Write16(uint32_t addr, uint16_t data)
+{
+    addr = TranslateAddr(addr);
+
+    mBus->SWrite16(addr, data);
+}
+
+void Starbuck::Write8(uint32_t addr, uint8_t data)
+{
+    addr = TranslateAddr(addr);
+
+    mBus->SWrite8(addr, data);
+}
 
 bool Starbuck::CondPassed(uint8_t cond)
 {

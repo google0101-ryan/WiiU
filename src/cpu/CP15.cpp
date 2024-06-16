@@ -11,14 +11,10 @@ void CP15::Write(uint32_t cpopc, uint32_t cn, uint32_t cm, uint32_t cp, uint32_t
     {
     case 0x80:
     {
-        if (data & 1)
-        {
-            printf("TODO: MMU enabled\n");
-            exit(1);
-        }
         control = data;
         return;
     }
+    case 0x180: // Domain access permission
     case 0x280: // Instruction fault status
     case 0x281: // Data fault status
     case 0x300: // Fault address
@@ -49,4 +45,9 @@ uint32_t CP15::Read(uint32_t cpopc, uint32_t cn, uint32_t cm, uint32_t cp)
         printf("Read from unknown CP15 register %d,c%d,c%d,%d (0x%08x)\n", cpopc, cn, cm, cp, addr);
         throw std::runtime_error("UNKNOWN CP15 REGISTER!");
     }
+}
+
+bool CP15::IsMMUEnabled()
+{
+    return control & 1;
 }

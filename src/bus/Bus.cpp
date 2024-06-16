@@ -9,6 +9,9 @@ uint16_t mem2_cfg = 0;
 uint32_t ahmn_mem0_cfg = 0;
 uint32_t ahmn_mem1_cfg = 0;
 uint32_t ahmn_mem2_cfg = 0;
+uint32_t ahmn_mem0[0x20] = {0};
+uint32_t ahmn_mem1[0x80] = {0};
+uint32_t ahmn_mem2[0x100] = {0};
 
 void ReadFile(const char* path, uint8_t* buf)
 {
@@ -90,6 +93,12 @@ uint32_t Bus::SRead32(uint32_t addr)
         return ahmn_mem1_cfg;
     case 0x0d8b0808:
         return ahmn_mem2_cfg;
+    case 0x0d8b0900 ... 0x0d8b0980:
+        return ahmn_mem0[(addr - 0x0d8b0900) / 4];
+    case 0x0d8b0a00 ... 0x0d8b0bff:
+        return ahmn_mem1[(addr - 0x0d8b0a00) / 4];
+    case 0x0d8b0c00 ... 0x0d8b1000:
+        return ahmn_mem2[(addr - 0x0d8b0c00) / 4];
     }
 
     if (addr >= 0x0d800000 && addr < 0x0d80FFFF)
@@ -207,6 +216,15 @@ void Bus::SWrite32(uint32_t addr, uint32_t data)
     case 0x0d800510:
     case 0x0d8005e0:
         return;
+    case 0x0d8b0900 ... 0x0d8b0980:
+        ahmn_mem0[(addr - 0x0d8b0900) / 4] = data ^ 0x80000000;
+        return;
+    case 0x0d8b0a00 ... 0x0d8b0bff:
+        ahmn_mem1[(addr - 0x0d8b0a00) / 4] = data ^ 0x80000000;
+        return;
+    case 0x0d8b0c00 ... 0x0d8b1000:
+        ahmn_mem2[(addr - 0x0d8b0c00) / 4] = data ^ 0x80000000;
+        return;
     case 0x0d8b0800:
         ahmn_mem0_cfg = data;
         return;
@@ -215,8 +233,6 @@ void Bus::SWrite32(uint32_t addr, uint32_t data)
         return;
     case 0x0d8b0808:
         ahmn_mem2_cfg = data;
-        return;
-    case 0x0d8b0900 ... 0x0d8b0920:
         return;
     }
     
@@ -254,20 +270,7 @@ void Bus::SWrite16(uint32_t addr, uint16_t data)
     switch (addr)
     {
     case 0x0d8b4228:
-    case 0x0d8b440e:
-    case 0x0d8b4410:
-    case 0x0d8b4412:
-    case 0x0d8b4414:
-    case 0x0d8b4416:
-    case 0x0d8b4418:
-    case 0x0d8b4472:
-    case 0x0d8b4474:
-    case 0x0d8b4476:
-    case 0x0d8b4478:
-    case 0x0d8b447A:
-    case 0x0d8b447C:
-    case 0x0d8b447E:
-    case 0x0d8b4480:
+    case 0x0d8b4406 ... 0x0d8b44FF:
         return;
     case 0x0d8b4400:
         mem0_cfg = data;

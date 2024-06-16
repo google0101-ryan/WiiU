@@ -89,27 +89,27 @@ void Starbuck::DoLdrStr(uint32_t instr)
     case 0b00:
     {
         // STR
-        mBus->SWrite32(addr, *(mRegs[rd]));
+        Write32(addr, *(mRegs[rd]));
         if (CanDisassemble) printf("0x%08x (0x%08x)\n", *(mRegs[rd]), addr);
         break;
     }
     case 0b10:
     {
         // LDR
-        *(mRegs[rd]) = mBus->SRead32(addr);
+        *(mRegs[rd]) = Read32(addr);
         if (CanDisassemble) printf("0x%08x (0x%08x)\n", *(mRegs[rd]), addr);
         break;
     }
     case 0b01:
     {
         // STRB
-        mBus->SWrite8(addr, *(mRegs[rd]));
+        Write8(addr, *(mRegs[rd]));
         break;
     }
     case 0b11:
     {
         // LDRB
-        *(mRegs[rd]) = mBus->SRead8(addr);
+        *(mRegs[rd]) = Read8(addr);
         break;
     }
     default:
@@ -189,14 +189,11 @@ void Starbuck::DoLdmStm(uint32_t instr)
     int regCount = 0;
     bool pcWasInList = (rlist & (1 << 15)) != 0;
 
-    if (s)
+    uint32_t oldMode = cpsr.m;
+
+    if (s && (!l || !pcWasInList))
     {
-        if (l && pcWasInList)
-        {
-            cpsr.bits = curSpsr->bits;
-        }
-        else
-            assert(0);
+        SwitchMode(MODE_USR);
     }
 
     auto doLdmStm = [&](int i) {
@@ -214,9 +211,9 @@ void Starbuck::DoLdmStm(uint32_t instr)
                 addr = u ? (addr + 4) : (addr - 4);
             
             if (l)
-                *(mRegs[i]) = mBus->SRead32(addr);
+                *(mRegs[i]) = Read32(addr);
             else
-                mBus->SWrite32(addr, *(mRegs[i]));
+                Write32(addr, *(mRegs[i]));
             
             if (!p)
                 addr = u ? (addr + 4) : (addr - 4);
@@ -232,6 +229,17 @@ void Starbuck::DoLdmStm(uint32_t instr)
     {
         for (int i = 15; i >= 0; i--)
             doLdmStm(i);
+    }
+    
+    if (s)
+    {
+        if (l && pcWasInList)
+        {
+            cpsr.bits = curSpsr->bits;
+            SwitchMode(cpsr.m);
+        }
+        else
+            SwitchMode(oldMode);
     }
 
     if (w)
@@ -333,9 +341,16 @@ void Starbuck::DoLdrhStrh(uint32_t instr)
     case 1:
     {
         if (l)
-            *(mRegs[rd]) = mBus->SRead16(addr);
+            *(mRegs[rd]) = Read16(addr);
         else
-            mBus->SWrite16(addr, *(mRegs[rd]));
+            Write16(addr, *(mRegs[rd]));
+        break;
+    }
+    case 3:
+    {
+        assert(l);
+        if (l)
+            *(mRegs[rd]) = (int32_t)(int16_t)Read16(addr);
         break;
     }
     default:

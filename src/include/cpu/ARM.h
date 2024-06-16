@@ -6,12 +6,13 @@
 
 enum ArmMode
 {
-    MODE_USR = 16,
-    MODE_FIQ,
-    MODE_IRQ,
-    MODE_SVC,
-    MODE_ABT,
-    MODE_UND,
+    MODE_USR = 0x10,
+    MODE_FIQ = 0x11,
+    MODE_IRQ = 0x12,
+    MODE_SVC = 0x13,
+    MODE_ABT = 0x17,
+    MODE_UND = 0x1B,
+    MODE_SYS = 0x1F
 };
 
 class Starbuck
@@ -29,6 +30,7 @@ public:
         uint32_t bits;
         struct
         {
+#if 1
             uint32_t m : 5;
             uint32_t t : 1;
             uint32_t f : 1;
@@ -43,6 +45,22 @@ public:
             uint32_t c : 1;
             uint32_t z : 1;
             uint32_t n : 1;
+#else
+            uint32_t n : 1;
+            uint32_t z : 1;
+            uint32_t c : 1;
+            uint32_t v : 1;
+            uint32_t q : 1;
+            uint32_t : 2;
+            uint32_t j : 1;
+            uint32_t : 14;
+            uint32_t e : 1;
+            uint32_t a : 1;
+            uint32_t i : 1;
+            uint32_t f : 1;
+            uint32_t t : 1;
+            uint32_t m : 5;
+#endif
         };
     };
 private:
@@ -56,10 +74,10 @@ private:
     uint32_t mUndRegs[2]; // SP, LR
     uint32_t mSvcRegs[2]; // SP, LR
     uint32_t mPc;
-    PSR cpsr, *curSpsr, svcSpsr;
+    PSR cpsr, *curSpsr, fiqSpsr, svcSpsr, abtSpsr, irqSpsr, undSpsr;
 
     bool mDidBranch;
-    bool CanDisassemble = false;
+    bool CanDisassemble = true;
 
     CP15* cp15;
 
@@ -67,6 +85,16 @@ private:
     // Internal functions
 private:
     void SwitchMode(uint32_t mode);
+
+    uint32_t TranslateAddr(uint32_t addr);
+
+    uint32_t Read32(uint32_t addr);
+    uint16_t Read16(uint32_t addr);
+    uint8_t Read8(uint32_t addr);
+
+    void Write32(uint32_t addr, uint32_t data);
+    void Write16(uint32_t addr, uint16_t data);
+    void Write8(uint32_t addr, uint8_t data);
     // ARM mode instructions
 private:
     void ExecuteInstruction(uint32_t instr);
@@ -80,6 +108,7 @@ private:
     void DoMCRMRC(uint32_t instr);
     void DoPsrTransfer(uint32_t instr);
     void DoUmull(uint32_t instr);
+    void DoSmull(uint32_t instr);
     void DoMul(uint32_t instr);
     // THUMB mode instructions
 private:
@@ -97,10 +126,22 @@ private:
         cpsr.n = (result >> 31) & 1;
     }
 
+    #define CARRY_ADD(a, b)  ((0xFFFFFFFF-a) < b)
+    #define CARRY_SUB(a, b)  (a >= b)
+
+    #define ADD_OVERFLOW(a, b, result) ((!(((a) ^ (b)) & 0x80000000)) && (((a) ^ (result)) & 0x80000000))
+    #define SUB_OVERFLOW(a, b, result) (((a) ^ (b)) & 0x80000000) && (((a) ^ (result)) & 0x80000000)
+
     inline void SetCVFlags(uint32_t a, uint32_t b, uint32_t result)
     {
-        cpsr.c = ((0xFFFFFFFF-a) < b);
-        cpsr.v = (((a) ^ (b)) & 0x80000000) && (((a) ^ (result)) & 0x80000000);
+        cpsr.c = CARRY_ADD(a, b);
+        cpsr.v = ADD_OVERFLOW(a, b, result);
+    }
+
+    inline void SetCVSubFlags(uint32_t a, uint32_t b, uint32_t result)
+    {
+        cpsr.c = CARRY_SUB(a, b);
+        cpsr.v = SUB_OVERFLOW(a, b, result);
     }
 
     bool CondPassed(uint8_t cond);

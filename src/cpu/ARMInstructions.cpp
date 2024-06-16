@@ -51,6 +51,12 @@ bool IsUmull(uint32_t instr)
             && ((instr >> 4) & 0b1111) == 0b1001;
 }
 
+bool IsSmull(uint32_t instr)
+{
+    return ((instr >> 21) & 0x7F) == 0b0110
+            && ((instr >> 4) & 0b1111) == 0b1001;
+}
+
 bool IsMul(uint32_t instr)
 {
     return ((instr >> 21) & 0x7F) == 0
@@ -69,6 +75,8 @@ void Starbuck::ExecuteInstruction(uint32_t instr)
         DoLdmStm(instr);
     else if (IsUmull(instr))
         DoUmull(instr);
+    else if (IsSmull(instr))
+        DoSmull(instr);
     else if (IsMul(instr))
         DoMul(instr);
     else if (IsLdrhStrh(instr))

@@ -94,11 +94,12 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         uint32_t imm = instr & 0xFF;
         uint32_t is = (instr >> 8) & 0xF;
 
-        op2 = std::rotr<uint32_t>(imm, is << 1);
+        op2 = std::rotr<uint32_t>(imm, is*2);
         op2_disasm = "#" + std::to_string(imm);
         
             if (is != 0)
-                op2_disasm += ", #" + std::to_string(is);
+                op2_disasm += ", #" + std::to_string(is*2);
+            op2_disasm += " (" + std::to_string(op2) + ")";
     }
 
     std::string op_disasm;
@@ -161,11 +162,26 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         uint32_t op1 = *(mRegs[rn]);
         *(mRegs[rd]) = op1 + op2;
         op_disasm = std::string("add") + (s ? "s" : "") + " r" + std::to_string(rd) + ", r" + std::to_string(rn) + ", " + op2_disasm;
+        if (CanDisassemble) printf("0x%08x\n", *(mRegs[rd]));
         
         if (s)
         {
             SetSZFlags(*(mRegs[rd]));
             SetCVFlags(op1, op2, *(mRegs[rd]));
+        }
+        break;
+    }
+    case 0x5:
+    {
+        uint32_t op1 = *(mRegs[rn]);
+        *(mRegs[rd]) = op1 + op2 + cpsr.c;
+        op_disasm = std::string("adc") + (s ? "s" : "") + " r" + std::to_string(rd) + ", r" + std::to_string(rn) + ", " + op2_disasm;
+        if (CanDisassemble) printf("0x%08x\n", *(mRegs[rd]));
+        
+        if (s)
+        {
+            SetSZFlags(*(mRegs[rd]));
+            SetCVFlags(op1, op2+cpsr.c, *(mRegs[rd]));
         }
         break;
     }
@@ -213,9 +229,10 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         assert(s);
 
         op_disasm = "cmp r" + std::to_string(rn) + ", " + op2_disasm;
+        if (CanDisassemble) printf("0x%08x, 0x%08x ", op1, op2);
         
         SetSZFlags(result);
-        SetCVFlags(op1, ~op2+1, result);
+        SetCVSubFlags(op1, op2, result);
         break;
     }
     case 0xB:
@@ -242,7 +259,7 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         if (s)
         {
             SetSZFlags(result);
-            SetCVFlags(op1, ~op2+1, result);
+            SetCVSubFlags(op1, op2, result);
         }
         break;
     }
@@ -252,7 +269,16 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         op_disasm = std::string("mov") + (s ? "s" : "") + " r" + std::to_string(rd) + ", " + op2_disasm;
 
         if (s)
+        {
             SetSZFlags(*(mRegs[rd]));
+            if (rd == 15)
+            {
+                cpsr.bits = curSpsr->bits;
+                cpsr.t = mPc & 1;
+                mPc &= ~1;
+                SwitchMode(cpsr.m);
+            }
+        }
         break;
     }
     case 0xE:
@@ -363,15 +389,15 @@ void Starbuck::DoPsrTransfer(uint32_t instr)
         if (!psr)
             mask &= 0xFFFFFFDF;
         
-        op2 &= ~mask;
-        op2 |= (source & mask);
+        source &= ~mask;
+        source |= (op2 & mask);
 
         if (!psr)
         {
             uint32_t newMode = (op2 & 0x1F);
-            SwitchMode((ArmMode)newMode);
+            SwitchMode(newMode);
         }
-        target->bits = op2;
+        target->bits = source;
     }
     else
     {

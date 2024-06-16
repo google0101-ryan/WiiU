@@ -18,6 +18,7 @@ void Starbuck::DoSvc(uint16_t instr)
         for (int i = 0; i < 1024; i++)
             buf[i] = mBus->SRead8((*mRegs[1]) + i);
         logFile.write(buf, strlen(buf));
+        logFile.flush();
         break;
     }
     }
@@ -31,5 +32,5 @@ void Starbuck::DoSvc(uint16_t instr)
 
     mPc = 0xFFFF0008;
     mDidBranch = true;
-    printf("swi 0x%02x\n", comment);
+    if (CanDisassemble) printf("swi 0x%02x\n", comment);
 }
