@@ -12,6 +12,7 @@ set(SOURCES src/main.cpp
             src/cpu/ARMInstructions.cpp
             src/cpu/Thumb.cpp
             src/cpu/ThumbAlu.cpp
+            src/cpu/ThumbLsu.cpp
             src/cpu/ThumbControlFlow.cpp
             src/cpu/DataProcessing.cpp
             src/cpu/LSU.cpp

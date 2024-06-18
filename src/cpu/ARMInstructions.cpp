@@ -63,9 +63,16 @@ bool IsMul(uint32_t instr)
             && ((instr >> 4) & 0b1111) == 0b1001;
 }
 
+bool IsUdf(uint32_t instr)
+{
+    return (instr & 0xFFFF00FF) == 0xE7F000F0;
+}
+
 void Starbuck::ExecuteInstruction(uint32_t instr)
 {
-    if (IsBranch(instr))
+    if (IsUdf(instr))
+        DoUndefined(instr);
+    else if (IsBranch(instr))
         DoBranch(instr);
     else if (IsSingleDataTransfer(instr))
         DoLdrStr(instr);

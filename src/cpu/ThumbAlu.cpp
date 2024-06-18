@@ -23,7 +23,7 @@ void Starbuck::DoHiRegOp(uint16_t instr)
     case 3:
     {
         if (rdHi)
-            *(mRegs[14]) = mPc-2;
+            *(mRegs[14]) = (mPc-2) | 1;
         uint32_t target = *(mRegs[rs]);
         mPc = target & ~1;
         cpsr.t = target & 1;
@@ -63,6 +63,19 @@ void Starbuck::DoAddSub(uint16_t instr)
     }
 }
 
+void Starbuck::DoAddSp(uint16_t instr)
+{
+    int nn = (instr & 0x7F)*4;
+    bool d = (instr >> 11) & 1;
+    if (d)
+        nn = -nn;
+    
+    *(mRegs[13]) += nn;
+
+    if (CanDisassemble)
+        printf("add sp, #%d\n", nn);
+}
+
 void Starbuck::DoRegOpImm(uint16_t instr)
 {
     uint8_t opcode = (instr >> 11) & 0x3;
@@ -76,8 +89,31 @@ void Starbuck::DoRegOpImm(uint16_t instr)
         SetSZFlags(*(mRegs[rs]));
         if (CanDisassemble) printf("mov r%d,#%d\n", rs, nn);
         break;
+    case 1:
+    {
+        uint32_t result = *(mRegs[rs]) - nn;
+        SetSZFlags(result);
+        SetCVSubFlags(*(mRegs[rs]), nn, result);
+        if (CanDisassemble) printf("cmp r%d,#%d\n", rs, nn);
+        break;
+    }
     default:
         printf("Unknown mov/cmp/add/sub imm op 0x%02x!\n", opcode);
         throw std::runtime_error("UNKNOWN MOV/CMP/ADD/SUB OP!");
     }
+}
+
+void Starbuck::DoGetReladdr(uint16_t instr)
+{
+    bool isSp = (instr >> 11) & 1;
+    uint8_t rd = (instr >> 8) & 0x7;
+    uint32_t nn = (instr & 0xFF) << 2;
+
+    uint32_t base;
+    if (isSp)
+        base = *(mRegs[13]);
+    else
+        base = mPc;
+    
+    *(mRegs[rd]) = base+nn;
 }

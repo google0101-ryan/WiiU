@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <cassert>
 
+Starbuck* gDebugStarbuck;
+
 Starbuck::Starbuck(Bus* pBus)
 : mBus(pBus)
 {
@@ -19,6 +21,8 @@ Starbuck::Starbuck(Bus* pBus)
     mDidBranch = false;
 
     cp15 = new CP15();
+
+    gDebugStarbuck = this;
 }
 
 void Starbuck::Tick()
@@ -65,6 +69,16 @@ void Starbuck::Tick()
             mPc += cpsr.t ? 2 : 4;
         }
     }
+
+    static bool checkForSvcCorrupted = false;
+    if (mSvcRegs[0] != 0)
+        checkForSvcCorrupted = true;
+    
+    if (checkForSvcCorrupted && mSvcRegs[0] == 0)
+    {
+        printf("Stack corrupted at 0x%08x!\n", cpsr.t ? mPc-4 : mPc-8);
+        throw std::runtime_error("Stack corrupted!");
+    }
 }
 
 void Starbuck::DumpState()
@@ -72,11 +86,12 @@ void Starbuck::DumpState()
     for (int i = 0; i < 16; i++)
         printf("r%d  \t->\t0x%08x\n", i, *(mRegs[i]));
     printf("pc  \t->\t0x%08x\n", cpsr.t ? mPc-4 : mPc-8);
-    printf("[%s%s%s%s]\n",
+    printf("[%s%s%s%s%d]\n",
             cpsr.c ? "c" : ".",
             cpsr.z ? "z" : ".",
             cpsr.v ? "v" : ".",
-            cpsr.n ? "n" : ".");
+            cpsr.n ? "n" : ".",
+            cpsr.m);
 }
 
 void Starbuck::SwitchMode(uint32_t mode)
@@ -88,7 +103,7 @@ void Starbuck::SwitchMode(uint32_t mode)
     // R15 points to PC in all modes
     mRegs[15] = &mPc;
 
-    printf("Switching to mode 0x%02x\n", mode);
+    if (CanDisassemble) printf("Switching to mode 0x%02x\n", mode);
 
     switch (mode)
     {
@@ -129,7 +144,20 @@ void Starbuck::SwitchMode(uint32_t mode)
     }
 }
 
-uint32_t Starbuck::TranslateAddr(uint32_t addr)
+bool CheckPermissions(bool isWrite, bool svc, int ap)
+{
+    if (ap == 0) return false;
+    else
+    {
+        if (svc) return true;
+
+        if (ap == 1) return false;
+        if (ap == 2) return !isWrite;
+        return true;
+    }
+}
+
+uint32_t Starbuck::TranslateAddr(uint32_t addr, bool isWrite)
 {
     if (!cp15->IsMMUEnabled())
         return addr;
@@ -163,7 +191,6 @@ uint32_t Starbuck::TranslateAddr(uint32_t addr)
     }
     else if (firstLevelType == 2)
     {
-        int ap = (firstLevelDesc >> 10) & 3;
         uint32_t sectionBase = firstLevelDesc & ~0xFFFFF;
         addr = sectionBase + (addr & 0xFFFFF);
     }
@@ -172,42 +199,42 @@ uint32_t Starbuck::TranslateAddr(uint32_t addr)
 
 uint32_t Starbuck::Read32(uint32_t addr)
 {
-    addr = TranslateAddr(addr);
+    addr = TranslateAddr(addr, false);
 
     return mBus->SRead32(addr);
 }
 
 uint16_t Starbuck::Read16(uint32_t addr)
 {
-    addr = TranslateAddr(addr);
+    addr = TranslateAddr(addr, false);
 
     return mBus->SRead16(addr);
 }
 
 uint8_t Starbuck::Read8(uint32_t addr)
 {
-    addr = TranslateAddr(addr);
+    addr = TranslateAddr(addr, false);
 
     return mBus->SRead8(addr);
 }
 
 void Starbuck::Write32(uint32_t addr, uint32_t data)
 {
-    addr = TranslateAddr(addr);
+    addr = TranslateAddr(addr, true);
 
     mBus->SWrite32(addr, data);
 }
 
 void Starbuck::Write16(uint32_t addr, uint16_t data)
 {
-    addr = TranslateAddr(addr);
+    addr = TranslateAddr(addr, true);
 
     mBus->SWrite16(addr, data);
 }
 
 void Starbuck::Write8(uint32_t addr, uint8_t data)
 {
-    addr = TranslateAddr(addr);
+    addr = TranslateAddr(addr, true);
 
     mBus->SWrite8(addr, data);
 }

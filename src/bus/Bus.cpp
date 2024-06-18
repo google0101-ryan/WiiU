@@ -58,6 +58,12 @@ void Bus::Dump()
     out.open("mem0.bin");
     out.write((char*)mem0, MEM0_SIZE);
     out.close();
+    out.open("IOS_BSP.bin");
+    out.write((char*)&mem2[0x3CC0000], 0xC0000);
+    out.close();
+    out.open("heap.bin");
+    out.write((char*)&mem2[0xD000000], 0x2B00000);
+    out.close();
 }
 
 uint32_t Bus::SRead32(uint32_t addr)

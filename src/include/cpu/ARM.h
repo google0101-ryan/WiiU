@@ -30,7 +30,6 @@ public:
         uint32_t bits;
         struct
         {
-#if 1
             uint32_t m : 5;
             uint32_t t : 1;
             uint32_t f : 1;
@@ -45,22 +44,6 @@ public:
             uint32_t c : 1;
             uint32_t z : 1;
             uint32_t n : 1;
-#else
-            uint32_t n : 1;
-            uint32_t z : 1;
-            uint32_t c : 1;
-            uint32_t v : 1;
-            uint32_t q : 1;
-            uint32_t : 2;
-            uint32_t j : 1;
-            uint32_t : 14;
-            uint32_t e : 1;
-            uint32_t a : 1;
-            uint32_t i : 1;
-            uint32_t f : 1;
-            uint32_t t : 1;
-            uint32_t m : 5;
-#endif
         };
     };
 private:
@@ -77,7 +60,7 @@ private:
     PSR cpsr, *curSpsr, fiqSpsr, svcSpsr, abtSpsr, irqSpsr, undSpsr;
 
     bool mDidBranch;
-    bool CanDisassemble = true;
+    bool CanDisassemble = false;
 
     CP15* cp15;
 
@@ -86,7 +69,7 @@ private:
 private:
     void SwitchMode(uint32_t mode);
 
-    uint32_t TranslateAddr(uint32_t addr);
+    uint32_t TranslateAddr(uint32_t addr, bool isWrite);
 
     uint32_t Read32(uint32_t addr);
     uint16_t Read16(uint32_t addr);
@@ -104,6 +87,7 @@ private:
     void DoLdmStm(uint32_t instr);
     void DoLdrhStrh(uint32_t instr);
     void DoBranch(uint32_t instr);
+    void DoUndefined(uint32_t instr);
     void DoBX(uint32_t instr);
     void DoMCRMRC(uint32_t instr);
     void DoPsrTransfer(uint32_t instr);
@@ -116,8 +100,17 @@ private:
 
     void DoHiRegOp(uint16_t instr);
     void DoAddSub(uint16_t instr);
+    void DoAddSp(uint16_t instr);
     void DoRegOpImm(uint16_t instr);
+    void DoGetReladdr(uint16_t instr);
     void DoSvc(uint16_t instr);
+    void DoCondBranch(uint16_t instr);
+    void DoLongBL1(uint16_t instr);
+    void DoLongBL2(uint16_t instr);
+    void DoPushPop(uint16_t instr);
+    void DoLoadStoreSpRel(uint16_t instr);
+    void DoLoadPcRel(uint16_t instr);
+    void DoLoadStoreImm(uint16_t instr);
     // Helper functions
 private:
     inline void SetSZFlags(uint32_t result)

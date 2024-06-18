@@ -2,6 +2,7 @@
 #include <util/debug.h>
 #include <cassert>
 #include <vector>
+#include <bit>
 
 std::string DoSingleDataTransferDisasm(bool l, bool b, bool w, bool p, uint32_t rd, std::string& part1, std::string& part2)
 {
@@ -59,7 +60,8 @@ void Starbuck::DoLdrStr(uint32_t instr)
                 offs = *(mRegs[rm]);
                 break;
             default:
-                assert(0);
+                printf("Unknown shift type %d, shamt=0\n", shtype);
+                throw std::runtime_error("Unknown shift type");
             }
         }
         else
@@ -69,8 +71,12 @@ void Starbuck::DoLdrStr(uint32_t instr)
             case 0:
                 offs = *(mRegs[rm]) << is;
                 break;
+            case 1:
+                offs = *(mRegs[rm]) >> is;
+                break;
             default:
-                assert(0);
+                printf("Unknown shift type %d, shamt=%d\n", shtype, is);
+                throw std::runtime_error("Unknown shift type");
             }
         }
         addr2Disasm = "r" + std::to_string(rm);
@@ -89,14 +95,14 @@ void Starbuck::DoLdrStr(uint32_t instr)
     case 0b00:
     {
         // STR
-        Write32(addr, *(mRegs[rd]));
+        Write32(addr & ~3, *(mRegs[rd]));
         if (CanDisassemble) printf("0x%08x (0x%08x)\n", *(mRegs[rd]), addr);
         break;
     }
     case 0b10:
     {
         // LDR
-        *(mRegs[rd]) = Read32(addr);
+        *(mRegs[rd]) = std::rotr<uint32_t>(Read32(addr & ~3), (addr & 3) * 8);
         if (CanDisassemble) printf("0x%08x (0x%08x)\n", *(mRegs[rd]), addr);
         break;
     }
@@ -123,7 +129,12 @@ void Starbuck::DoLdrStr(uint32_t instr)
     if (!p || w)
         *(mRegs[rn]) = addr;
     
-    mDidBranch = l && (rd == 15);
+    if (l && rd == 15)
+    {
+        mDidBranch = true;
+        cpsr.t = mPc & 1;
+        mPc &= ~1;
+    }
 }
 
 const char* ldmStmAmod[] =
@@ -180,10 +191,13 @@ void Starbuck::DoLdmStm(uint32_t instr)
     bool l = (instr >> 20) & 1;
     uint8_t rn = (instr >> 16) & 0xF;
     uint16_t rlist = instr & 0xFFFF;
+    bool change_cpsr = s && (rlist & (1 << 15)) && l;
+    bool user_bank_transfer = s && (!(rlist & (1 << 15)) || !l);
 
     assert(rlist);
 
-    uint32_t addr = *(mRegs[rn]);
+    uint32_t baseAddr;
+    uint32_t addr = baseAddr = *(mRegs[rn]);
 
     bool rnInReglist = false, rnLast;
     int regCount = 0;
@@ -191,9 +205,10 @@ void Starbuck::DoLdmStm(uint32_t instr)
 
     uint32_t oldMode = cpsr.m;
 
-    if (s && (!l || !pcWasInList))
+    if (user_bank_transfer)
     {
         SwitchMode(MODE_USR);
+        cpsr.m = MODE_USR;
     }
 
     auto doLdmStm = [&](int i) {
@@ -211,9 +226,9 @@ void Starbuck::DoLdmStm(uint32_t instr)
                 addr = u ? (addr + 4) : (addr - 4);
             
             if (l)
-                *(mRegs[i]) = Read32(addr);
+                *(mRegs[i]) = Read32(addr & ~3);
             else
-                Write32(addr, *(mRegs[i]));
+                Write32(addr & ~3, *(mRegs[i]));
             
             if (!p)
                 addr = u ? (addr + 4) : (addr - 4);
@@ -231,15 +246,11 @@ void Starbuck::DoLdmStm(uint32_t instr)
             doLdmStm(i);
     }
     
-    if (s)
+
+    if (user_bank_transfer)
     {
-        if (l && pcWasInList)
-        {
-            cpsr.bits = curSpsr->bits;
-            SwitchMode(cpsr.m);
-        }
-        else
-            SwitchMode(oldMode);
+        SwitchMode(oldMode);
+        cpsr.m = oldMode;
     }
 
     if (w)
@@ -251,6 +262,8 @@ void Starbuck::DoLdmStm(uint32_t instr)
                 if (!rnLast || regCount == 1)
                     *(mRegs[rn]) = addr;
             }
+            else
+                *(mRegs[rn]) = baseAddr;
         }
         else
         {
@@ -258,10 +271,20 @@ void Starbuck::DoLdmStm(uint32_t instr)
         }
     }
     
+    if (change_cpsr)
+    {
+        cpsr.bits = curSpsr->bits;
+        SwitchMode(cpsr.m);
+    }
+    
     if (CanDisassemble) printf("%s\n", DisasmLdmStm(p, u, s, w, l, rn, rlist).c_str());
 
-    if (pcWasInList)
+    if (pcWasInList && l)
+    {
         mDidBranch = true;
+        cpsr.t = mPc & 1;
+        mPc &= ~1;
+    }
 }
 
 std::string DisasmLdrhStrh(bool p, bool u, bool i, bool w, bool l, uint8_t rn, uint8_t rd, uint32_t imm, uint8_t op, uint32_t rmOrImm)
@@ -341,16 +364,16 @@ void Starbuck::DoLdrhStrh(uint32_t instr)
     case 1:
     {
         if (l)
-            *(mRegs[rd]) = Read16(addr);
+            *(mRegs[rd]) = Read16(addr & ~1);
         else
-            Write16(addr, *(mRegs[rd]));
+            Write16(addr & ~1, *(mRegs[rd]));
         break;
     }
     case 3:
     {
         assert(l);
         if (l)
-            *(mRegs[rd]) = (int32_t)(int16_t)Read16(addr);
+            *(mRegs[rd]) = (int32_t)(int16_t)Read16(addr & ~1);
         break;
     }
     default:

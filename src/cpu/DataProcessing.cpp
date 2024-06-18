@@ -3,7 +3,7 @@
 #include <bit>
 #include <cassert>
 
-uint32_t DoShift(uint32_t shtype, uint32_t shamt, uint32_t op, bool doFlags, Starbuck::PSR* cpsr, std::string& disasm)
+uint32_t DoShift(uint32_t shtype, uint32_t shamt, uint32_t op, bool doFlags, Starbuck::PSR* cpsr, std::string& disasm, bool isReg)
 {
     // 0 is a special shift type. Handle it here
     if (shamt == 0)
@@ -13,9 +13,20 @@ uint32_t DoShift(uint32_t shtype, uint32_t shamt, uint32_t op, bool doFlags, Sta
         case 0: // LSL
             return op;
         case 1:
-            if (doFlags)
-                cpsr->c = (op >> 31) & 1;
-            return 0;
+            if (isReg)
+            {
+                uint32_t data = op >> shamt;
+                if (doFlags)
+                    cpsr->c = (op & (1 << shamt));
+                disasm += ", lsr #" + std::to_string(shamt);
+                return data;
+            }
+            else
+            {
+                if (doFlags)
+                    cpsr->c = (op >> 31) & 1;
+                return 0;
+            }
         default:
             printf("TODO: shtype %d, shamt=0\n", shtype);
             exit(1);
@@ -79,14 +90,15 @@ void Starbuck::DoDataProcessing(uint32_t instr)
             uint8_t rs = (instr >> 8) & 0xF;
             uint8_t shamt = *(mRegs[rs]) & 0x1F;
             op2_disasm = "r" + std::to_string(rm);
-            op2 = DoShift(shtype, shamt, op2, s, &cpsr, op2_disasm);
+            op2 = DoShift(shtype, shamt, op2, s, &cpsr, op2_disasm, true);
             op2_disasm = "r" + std::to_string(rm) + ", r" + std::to_string(rs);
+            if (CanDisassemble) printf("0x%02x, 0x%08x\n", shamt, op2);
         }
         else
         {
             uint32_t shamt = (instr >> 7) & 0x1F;
             op2_disasm = "r" + std::to_string(rm);
-            op2 = DoShift(shtype, shamt, op2, s, &cpsr, op2_disasm);
+            op2 = DoShift(shtype, shamt, op2, s, &cpsr, op2_disasm, false);
         }
     }
     else
@@ -288,6 +300,8 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         *(mRegs[rd]) = result;
         op_disasm = std::string("bic") + (s ? "s r" : " r") + std::to_string(rd) + ", r" + std::to_string(rn) + ", " + op2_disasm;
         
+        if (CanDisassemble) printf("0x%08x\n", result);
+
         if (s)
             SetSZFlags(result);
         break;
@@ -307,7 +321,11 @@ void Starbuck::DoDataProcessing(uint32_t instr)
     }
 
     if (rd == 15)
+    {
+        cpsr.t = mPc & 1;
+        mPc &= ~1;
         mDidBranch = true;
+    }
     
     if (CanDisassemble) printf("%s\n", op_disasm.c_str());
 }
