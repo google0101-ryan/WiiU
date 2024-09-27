@@ -1,4 +1,5 @@
 #include <cpu/CP15.h>
+#include <cpu/ARM.h>
 
 #include <cstdio>
 #include <stdexcept>
@@ -21,6 +22,7 @@ void CP15::Write(uint32_t cpopc, uint32_t cn, uint32_t cm, uint32_t cp, uint32_t
     case 0x3A8: // Data cache invalidation
     case 0x3B0: // Instruction cache invalidation
     case 0x3D1: // Data cache invalidation by MVA
+    case 0x3D3:
     case 0x3D4: // Drain write buffer
     case 0x438: // Invalidate TLB
         return;
@@ -34,13 +36,15 @@ void CP15::Write(uint32_t cpopc, uint32_t cn, uint32_t cm, uint32_t cp, uint32_t
     }
 }
 
-uint32_t CP15::Read(uint32_t cpopc, uint32_t cn, uint32_t cm, uint32_t cp)
+uint32_t CP15::Read(Starbuck* core, uint32_t cpopc, uint32_t cn, uint32_t cm, uint32_t cp)
 {
     uint32_t addr = (cpopc << 11) | (cn << 7) | (cm << 3) | cp;
     switch (addr)
     {
     case 0x80:
         return control;
+    case 0x3D3:
+        return core->cpsr.z;
     default:
         printf("Read from unknown CP15 register %d,c%d,c%d,%d (0x%08x)\n", cpopc, cn, cm, cp, addr);
         throw std::runtime_error("UNKNOWN CP15 REGISTER!");

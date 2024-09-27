@@ -17,12 +17,21 @@ enum ArmMode
 
 class Starbuck
 {
+    friend class CP15;
     // Public interface
 public:
     Starbuck(Bus* pBus);
 
+    void DoInterrupt();
+
     void Tick();
     void DumpState();
+
+    uint32_t GetReg(int reg)
+    {
+        return (*mRegs[reg]);
+    }
+
     // Type definitions
 public:
     union PSR
@@ -85,15 +94,19 @@ private:
     void DoDataProcessing(uint32_t instr);
     void DoLdrStr(uint32_t instr);
     void DoLdmStm(uint32_t instr);
+    void DoBlockLoad(uint32_t instr);
+    void DoBlockStore(uint32_t instr);
     void DoLdrhStrh(uint32_t instr);
     void DoBranch(uint32_t instr);
     void DoUndefined(uint32_t instr);
     void DoBX(uint32_t instr);
     void DoMCRMRC(uint32_t instr);
+    void DoCLZ(uint32_t instr);
     void DoPsrTransfer(uint32_t instr);
     void DoUmull(uint32_t instr);
     void DoSmull(uint32_t instr);
     void DoMul(uint32_t instr);
+    void DoMla(uint32_t instr);
     // THUMB mode instructions
 private:
     void ExecuteThumbInstruction(uint16_t instr);
@@ -138,4 +151,7 @@ private:
     }
 
     bool CondPassed(uint8_t cond);
+
+    bool interruptPending = false;
+    bool waitForInterrupt = false;
 };

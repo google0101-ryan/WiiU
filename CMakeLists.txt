@@ -21,7 +21,12 @@ set(SOURCES src/main.cpp
             src/cpu/CP15.cpp
             src/hw/usb/OHCI.cpp
             src/hw/usb/EHCI.cpp
-            src/hw/Latte.cpp)
+            src/hw/Latte.cpp
+            src/hw/seeprom.cpp
+            src/hw/i2c.cpp
+            src/hw/sdhc.cpp
+            src/hw/crypto/AES.cpp
+            src/gpu/GX2.cpp)
 
 set(CMAKE_BUILD_TYPE Debug)
 

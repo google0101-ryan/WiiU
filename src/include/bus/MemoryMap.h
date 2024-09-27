@@ -16,7 +16,11 @@
 #define MEM2_END   ((uint32_t)0xD0000000)
 #define MEM2_SIZE  ((uint32_t)MEM2_END - MEM2_START)
 
-#define SRAM0_START ((uint32_t)0xFFFF0000)
+#define SRAM0_MIRROR_START ((uint32_t)0x0D400000)
+#define SRAM0_MIRROR_END   ((uint32_t)0x0D7FFFFF)
+#define SRAM0_MIRROR_SIZE  ((uint32_t)(SRAM0_MIRROR_END - SRAM0_MIRROR_START + 1))
+
+#define SRAM0_START ((uint32_t)0xFFF00000)
 #define SRAM0_END   ((uint32_t)0xFFFFFFFF)
 #define SRAM0_SIZE  ((uint32_t)(SRAM0_END - SRAM0_START + 1))
 

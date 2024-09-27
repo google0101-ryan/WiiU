@@ -7,6 +7,7 @@
 #include <hw/usb/OHCI.h>
 #include <hw/usb/EHCI.h>
 #include <hw/Latte.h>
+#include <hw/sdhc.h>
 
 // Prefixes:
 // E = Espresso (PPC core)
@@ -16,6 +17,8 @@ class Bus
 public:
     Bus(std::string starbuckKernel);
     void Update();
+
+    void LoadIOSU();
 
     void Dump();
 
@@ -36,4 +39,5 @@ private:
     OHCI* ochi[4];
     EHCI* ehci[3];
     Latte* latte;
+    SDHC* sdio0;
 };

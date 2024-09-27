@@ -27,6 +27,13 @@ uint32_t DoShift(uint32_t shtype, uint32_t shamt, uint32_t op, bool doFlags, Sta
                     cpsr->c = (op >> 31) & 1;
                 return 0;
             }
+        case 2:
+        {
+            bool bit31 = (op >> 31) & 1;
+            if (doFlags)
+                cpsr->c = bit31;
+            return bit31 ? 0xFFFFFFFF : 0;
+        }
         default:
             printf("TODO: shtype %d, shamt=0\n", shtype);
             exit(1);
@@ -300,7 +307,7 @@ void Starbuck::DoDataProcessing(uint32_t instr)
         *(mRegs[rd]) = result;
         op_disasm = std::string("bic") + (s ? "s r" : " r") + std::to_string(rd) + ", r" + std::to_string(rn) + ", " + op2_disasm;
         
-        if (CanDisassemble) printf("0x%08x\n", result);
+        if (CanDisassemble) printf("0x%08x (0x%08x, 0x%08x)\n", result, op1, op2);
 
         if (s)
             SetSZFlags(result);
@@ -344,12 +351,16 @@ void Starbuck::DoMCRMRC(uint32_t instr)
 
     if (isMrc)
     {
-        *(mRegs[rd]) = cp15->Read(cpopc, cn, cm, cp);
+        if (rd != 15)
+            *(mRegs[rd]) = cp15->Read(this, cpopc, cn, cm, cp);
         if (CanDisassemble) printf("mrc cp%d,%d,r%d,c%d,c%d,%d\n", pn, cpopc, rd, cn, cm, cp);
     }
     else
     {
-        cp15->Write(cpopc, cn, cm, cp, *(mRegs[rd]));
+        if (cn == 7 && cm == 0 && cp == 4)
+            waitForInterrupt = true;
+        else
+            cp15->Write(cpopc, cn, cm, cp, *(mRegs[rd]));
         if (CanDisassemble) printf("mcr cp%d,%d,r%d,c%d,c%d,%d\n", pn, cpopc, rd, cn, cm, cp);
     }
 }
@@ -430,4 +441,21 @@ void Starbuck::DoPsrTransfer(uint32_t instr)
 
         if (CanDisassemble) printf("mrs %spsr, r%d\n", psr ? "s" : "c", rd);
     }
+}
+
+void Starbuck::DoCLZ(uint32_t instr)
+{
+    int rd = (instr >> 12) & 0xF;
+    int rm = instr & 0xF;
+
+    uint32_t val = *(mRegs[rm]);
+    int bit;
+    for (bit = 31; bit >= 0; bit--)
+    {
+        if (val & (1 << bit)) break;
+    }
+
+    *(mRegs[rd]) = 31 - bit;
+
+    if (CanDisassemble) printf("clz r%d, r%d\n", rd, rm);
 }

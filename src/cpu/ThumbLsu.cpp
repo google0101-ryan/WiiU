@@ -20,6 +20,7 @@ void Starbuck::DoPushPop(uint16_t instr)
             {
                 regs++;
                 *(mRegs[i]) = Read32(sp & ~3);
+                printf("0x%08x: 0x%08x\n", sp, *(mRegs[i]));
                 sp += 4;
             }
         }
@@ -55,6 +56,7 @@ void Starbuck::DoPushPop(uint16_t instr)
                 regs++;
                 sp -= 4;
                 Write32(sp & ~3, *(mRegs[i]));
+                printf("%d: 0x%08x\n", i, *(mRegs[i]));
             }
         }
 
@@ -77,7 +79,7 @@ void Starbuck::DoLoadStoreSpRel(uint16_t instr)
         Write32(addr & ~3, *(mRegs[rd]));
     
     if (CanDisassemble)
-        printf("%s r%d, [sp+#%d]\n", l ? "ldr" : "str", rd, nn);
+        printf("%s r%d, [sp+#%d] (0x%08x, 0x%08x)\n", l ? "ldr" : "str", rd, nn, addr&~3, *(mRegs[rd]));
 }
 
 void Starbuck::DoLoadPcRel(uint16_t instr)
@@ -112,7 +114,7 @@ void Starbuck::DoLoadStoreImm(uint16_t instr)
 
         Write32(base & ~3, *(mRegs[rd]));
 
-        if (CanDisassemble) printf("str r%d, [r%d, #%d]\n", rd, rb, nn);
+        if (CanDisassemble) printf("str r%d, [r%d, #%d] (0x%08x, 0x%08x)\n", rd, rb, nn, base & ~3, *(mRegs[rd]));
 
         break;
     }
@@ -125,6 +127,17 @@ void Starbuck::DoLoadStoreImm(uint16_t instr)
         *(mRegs[rd]) = std::rotr<uint32_t>(*(mRegs[rd]), (base & 3) * 8);
 
         if (CanDisassemble) printf("ldr r%d, [r%d, #%d]\n", rd, rb, nn);
+
+        break;
+    }
+    case 2:
+    {
+        nn <<= 2;
+        base += nn;
+
+        Write8(base, *(mRegs[rd]));
+
+        if (CanDisassemble) printf("strb r%d, [r%d, #%d] (0x%08x, 0x%08x)\n", rd, rb, nn, base, *(mRegs[rd]) & 0xff);
 
         break;
     }

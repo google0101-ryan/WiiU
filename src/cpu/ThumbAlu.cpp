@@ -113,7 +113,10 @@ void Starbuck::DoGetReladdr(uint16_t instr)
     if (isSp)
         base = *(mRegs[13]);
     else
-        base = mPc;
+        base = mPc & ~2;
     
     *(mRegs[rd]) = base+nn;
+
+    if (CanDisassemble)
+        printf("add r%d,[%s,#%d] (0x%08x)\n", rd, isSp ? "sp" : "pc", nn, *(mRegs[rd]));
 }

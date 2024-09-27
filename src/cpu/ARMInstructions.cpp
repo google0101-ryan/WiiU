@@ -63,9 +63,22 @@ bool IsMul(uint32_t instr)
             && ((instr >> 4) & 0b1111) == 0b1001;
 }
 
+bool IsMla(uint32_t instr)
+{
+    return ((instr >> 25) & 0x7) == 0
+            && ((instr >> 21) & 0xF) == 1
+            && ((instr >> 4) & 0xF) == 0b1001;
+}
+
 bool IsUdf(uint32_t instr)
 {
     return (instr & 0xFFFF00FF) == 0xE7F000F0;
+}
+
+bool IsCLZ(uint32_t instr)
+{
+    return ((instr >> 16) & 0xFFF) == 0x16F
+        && ((instr >> 4) & 0xFF) == 0xF1;
 }
 
 void Starbuck::ExecuteInstruction(uint32_t instr)
@@ -86,10 +99,14 @@ void Starbuck::ExecuteInstruction(uint32_t instr)
         DoSmull(instr);
     else if (IsMul(instr))
         DoMul(instr);
+    else if (IsMla(instr))
+        DoMla(instr);
     else if (IsLdrhStrh(instr))
         DoLdrhStrh(instr);
     else if (IsMcrMrc(instr))
         DoMCRMRC(instr);
+    else if (IsCLZ(instr))
+        DoCLZ(instr);
     else if (IsMsrMrs(instr))
         DoPsrTransfer(instr);
     else if (IsDataProcessing(instr))

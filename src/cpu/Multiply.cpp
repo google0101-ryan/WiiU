@@ -52,3 +52,21 @@ void Starbuck::DoMul(uint32_t instr)
 
     if (CanDisassemble) printf("mul r%d,r%d,r%d\n", rd, rm, rs);
 }
+
+void Starbuck::DoMla(uint32_t instr)
+{
+    bool s = (instr >> 20) & 1;
+    uint8_t rd = (instr >> 16) & 0xF;
+    uint8_t rn = (instr >> 12) & 0xF;
+    uint8_t rs = (instr >> 8) & 0xF;
+    uint8_t rm = instr & 0xF;
+
+    uint32_t result = *(mRegs[rm]) * *(mRegs[rs]) + *(mRegs[rn]);
+
+    if (s)
+        SetSZFlags(result);
+
+    *(mRegs[rd]) = result;
+
+    if (CanDisassemble) printf("mla r%d,%d,%d,%d\n", rd, rm, rs, rn);
+}

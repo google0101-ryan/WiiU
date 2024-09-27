@@ -26,6 +26,8 @@ void WiiU::Init()
 {
     mBus = new Bus(options.starbuckKernelPath);
     mArmCpu = new Starbuck(mBus);
+    mGX2 = new GX2();
+    mAES = new AES();
 }
 
 void WiiU::Run()

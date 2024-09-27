@@ -136,11 +136,9 @@ void Starbuck::DoLdrStr(uint32_t instr)
         mPc &= ~1;
     }
 }
-
-const char* ldmStmAmod[] =
-{
-    "da", "ia", "db", "ib"
-};
+const char *ldmStmAmod[] =
+    {
+        "da", "ia", "db", "ib"};
 
 std::string DisasmLdmStm(bool p, bool u, bool s, bool w, bool l, uint8_t rn, uint16_t rlist)
 {
@@ -191,100 +189,215 @@ void Starbuck::DoLdmStm(uint32_t instr)
     bool l = (instr >> 20) & 1;
     uint8_t rn = (instr >> 16) & 0xF;
     uint16_t rlist = instr & 0xFFFF;
-    bool change_cpsr = s && (rlist & (1 << 15)) && l;
-    bool user_bank_transfer = s && (!(rlist & (1 << 15)) || !l);
 
-    assert(rlist);
+    if (CanDisassemble)
+        printf("%s\n", DisasmLdmStm(p, u, s, w, l, rn, rlist).c_str());
+    
+    if (l)
+        DoBlockLoad(instr);
+    else
+        DoBlockStore(instr);
+}
 
-    uint32_t baseAddr;
-    uint32_t addr = baseAddr = *(mRegs[rn]);
-
-    bool rnInReglist = false, rnLast;
-    int regCount = 0;
-    bool pcWasInList = (rlist & (1 << 15)) != 0;
-
-    uint32_t oldMode = cpsr.m;
-
+void Starbuck::DoBlockLoad(uint32_t instr)
+{
+    bool p = (instr >> 24) & 1;
+    bool u = (instr >> 23) & 1;
+    bool s = (instr >> 22) & 1;
+    bool w = (instr >> 21) & 1;
+    uint8_t rn = (instr >> 16) & 0xF;
+    uint16_t rlist = instr & 0xFFFF;
+    bool change_cpsr = s && (rlist & (1 << 15));
+    bool user_bank_transfer = s && !(rlist & (1 << 15));
+    
+    uint32_t address = *(mRegs[rn]);
+    int offset;
+    if (u)
+        offset = 4;
+    else
+        offset = -4;
+    
+    uint32_t old_mode = cpsr.m;
     if (user_bank_transfer)
     {
         SwitchMode(MODE_USR);
         cpsr.m = MODE_USR;
     }
 
-    auto doLdmStm = [&](int i) {
-        if (rlist & (1 << i))
+    int regs = 0;
+    if (u)
+    {
+        for (int i = 0; i < 15; i++)
         {
-            regCount++;
-            rnLast = false;
-            if (i == rn)
+            uint32_t bit = 1 << i;
+            if (rlist & bit)
             {
-                rnInReglist = true;
-                rnLast = true;
+                regs++;
+                if (p)
+                {
+                    address += offset;
+                    *(mRegs[i]) = Read32(address);
+                }
+                else
+                {
+                    *(mRegs[i]) = Read32(address);
+                    address += offset;
+                }
             }
-            
-            if (p)
-                addr = u ? (addr + 4) : (addr - 4);
-            
-            if (l)
-                *(mRegs[i]) = Read32(addr & ~3);
-            else
-                Write32(addr & ~3, *(mRegs[i]));
-            
-            if (!p)
-                addr = u ? (addr + 4) : (addr - 4);
         }
-    };
+        if (rlist & (1 << 15))
+        {
+            if (p)
+            {
+                address += offset;
+                mPc = Read32(address);
+                cpsr.t = mPc & 1;
+                mPc &= ~1;
+                mDidBranch = true;
+            }
+            else
+            {
+                mPc = Read32(address);
+                cpsr.t = mPc & 1;
+                mPc &= ~1;
+                address += offset;
+                mDidBranch = true;
+            }
+        }
+    }
+    else
+    {
+        if (rlist & (1 << 15))
+        {
+            if (p)
+            {
+                address += offset;
+                mPc = Read32(address);
+                cpsr.t = mPc & 1;
+                mPc & ~1;
+            }
+            else
+            {
+                mPc = Read32(address);
+                cpsr.t = mPc & 1;
+                mPc & ~1;
+                address += offset;
+            }
+            regs++;
+        }
+        for (int i = 14; i >= 0; i--)
+        {
+            int bit = 1 << i;
+            if (rlist & bit)
+            {
+                regs++;
+                if (p)
+                {
+                    address += offset;
+                    *(mRegs[i]) = Read32(address);
+                }
+                else
+                {
+                    *(mRegs[i]) = Read32(address);
+                    address += offset;
+                }
+            }
+        }
+    }
+
+    if (user_bank_transfer)
+    {
+        SwitchMode(old_mode);
+        cpsr.m = old_mode;
+    }
+
+    if (w && !(rlist & (1 << rn)))
+        *(mRegs[rn]) = address;
     
+    if (change_cpsr)
+    {
+        cpsr = *curSpsr;
+        SwitchMode(cpsr.m);
+    }
+}
+
+void Starbuck::DoBlockStore(uint32_t instr)
+{
+    bool p = (instr >> 24) & 1;
+    bool u = (instr >> 23) & 1;
+    bool s = (instr >> 22) & 1;
+    bool w = (instr >> 21) & 1;
+    uint8_t rn = (instr >> 16) & 0xF;
+    uint16_t rlist = instr & 0xFFFF;
+    bool change_cpsr = s && (rlist & (1 << 15));
+    bool user_bank_transfer = s && !(rlist & (1 << 15));
+    
+    uint32_t address = *(mRegs[rn]);
+    int offset;
+    if (u)
+        offset = 4;
+    else
+        offset = -4;
+    
+    uint32_t old_mode = cpsr.m;
+    if (user_bank_transfer)
+    {
+        SwitchMode(MODE_USR);
+        cpsr.m = MODE_USR;
+    }
+
+    int regs = 0;
     if (u)
     {
         for (int i = 0; i < 16; i++)
-            doLdmStm(i);
+        {
+            int bit = 1 << i;
+            if (rlist & bit)
+            {
+                regs++;
+                if (p)
+                {
+                    address += offset;
+                    Write32(address, *(mRegs[i]));
+                }
+                else
+                {
+                    Write32(address, *(mRegs[i]));
+                    address += offset;
+                }
+            }
+        }
     }
     else
     {
         for (int i = 15; i >= 0; i--)
-            doLdmStm(i);
+        {
+            int bit = 1 << i;
+            if (rlist & bit)
+            {
+                regs++;
+                if (p)
+                {
+                    address += offset;
+                    Write32(address, *(mRegs[i]));
+                }
+                else
+                {
+                    Write32(address, *(mRegs[i]));
+                    address += offset;
+                }
+            }
+        }
     }
-    
 
     if (user_bank_transfer)
     {
-        SwitchMode(oldMode);
-        cpsr.m = oldMode;
+        SwitchMode(old_mode);
+        cpsr.m = old_mode;
     }
 
     if (w)
-    {
-        if (rnInReglist)
-        {
-            if (l)
-            {
-                if (!rnLast || regCount == 1)
-                    *(mRegs[rn]) = addr;
-            }
-            else
-                *(mRegs[rn]) = baseAddr;
-        }
-        else
-        {
-            *(mRegs[rn]) = addr;
-        }
-    }
-    
-    if (change_cpsr)
-    {
-        cpsr.bits = curSpsr->bits;
-        SwitchMode(cpsr.m);
-    }
-    
-    if (CanDisassemble) printf("%s\n", DisasmLdmStm(p, u, s, w, l, rn, rlist).c_str());
-
-    if (pcWasInList && l)
-    {
-        mDidBranch = true;
-        cpsr.t = mPc & 1;
-        mPc &= ~1;
-    }
+        *(mRegs[rn]) = address;
 }
 
 std::string DisasmLdrhStrh(bool p, bool u, bool i, bool w, bool l, uint8_t rn, uint8_t rd, uint32_t imm, uint8_t op, uint32_t rmOrImm)
@@ -367,6 +480,13 @@ void Starbuck::DoLdrhStrh(uint32_t instr)
             *(mRegs[rd]) = Read16(addr & ~1);
         else
             Write16(addr & ~1, *(mRegs[rd]));
+        break;
+    }
+    case 2:
+    {
+        assert(l);
+        if (l)
+            *(mRegs[rd]) = (int32_t)(int8_t)Read8(addr);
         break;
     }
     case 3:

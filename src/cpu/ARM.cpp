@@ -12,7 +12,7 @@ Starbuck::Starbuck(Bus* pBus)
     // PC is always 0x8 bytes ahead, due to pipelining
     // This puts us firmly in MEM1, where IOSU loader is loaded
     // We add STARBUCK_KERNEL_START_OFFS to skip over the Ancast header (0x300 bytes)
-    mPc = STARBUCK_KERNEL_START_OFFS + 0x8;
+    mPc = 0xD400218;
 
     // ARM starts up in SVC mode by default
     SwitchMode(MODE_SVC);
@@ -25,8 +25,35 @@ Starbuck::Starbuck(Bus* pBus)
     gDebugStarbuck = this;
 }
 
+void Starbuck::DoInterrupt()
+{
+    if (cpsr.i == 0)
+    {
+        mIrqRegs[1] = (cpsr.t ? mPc-2 : mPc-4);
+        irqSpsr.bits = cpsr.bits;
+        cpsr.t = 0;
+        cpsr.m = MODE_IRQ;
+        SwitchMode(MODE_IRQ);
+        cpsr.i = 1;
+        mPc = 0xFFFF0018 + 8;
+        printf("STARBUCK: Entered interrupt\n");
+        waitForInterrupt = false;
+        interruptPending = false;
+    }
+    else
+        interruptPending = true;
+}
+
 void Starbuck::Tick()
 {
+    // if ((mPc - 8) == 0xd414b98)
+    //     CanDisassemble = true;
+
+    if (interruptPending)
+        DoInterrupt();
+    else if (waitForInterrupt)
+        return;
+
     if (cpsr.t)
     {
         uint16_t opcode = Read16(mPc-4);
@@ -68,16 +95,6 @@ void Starbuck::Tick()
             mDidBranch = false;
             mPc += cpsr.t ? 2 : 4;
         }
-    }
-
-    static bool checkForSvcCorrupted = false;
-    if (mSvcRegs[0] != 0)
-        checkForSvcCorrupted = true;
-    
-    if (checkForSvcCorrupted && mSvcRegs[0] == 0)
-    {
-        printf("Stack corrupted at 0x%08x!\n", cpsr.t ? mPc-4 : mPc-8);
-        throw std::runtime_error("Stack corrupted!");
     }
 }
 
@@ -169,7 +186,7 @@ uint32_t Starbuck::TranslateAddr(uint32_t addr, bool isWrite)
     int firstLevelType = firstLevelDesc & 3;
     if (firstLevelType == 0)
     {
-        printf("TODO: Signal page fault!\n");
+        printf("TODO: Signal page fault for address 0x%08x (0x%08x, 0x%08x)!\n", addr, firstLevelDesc, *(mRegs[14]));
         exit(1);
     }
     else if (firstLevelType == 1)
@@ -199,6 +216,8 @@ uint32_t Starbuck::TranslateAddr(uint32_t addr, bool isWrite)
 
 uint32_t Starbuck::Read32(uint32_t addr)
 {
+    if (addr == 0xe6000e18)
+        CanDisassemble = true;
     addr = TranslateAddr(addr, false);
 
     return mBus->SRead32(addr);
